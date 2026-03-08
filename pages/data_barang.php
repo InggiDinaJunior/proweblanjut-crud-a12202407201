@@ -48,6 +48,7 @@ $total_pages = (int)ceil($total_rows / $per_page);
 $stmt = $pdo->prepare("
     SELECT b.id, b.kode_barang, b.nama_barang, b.jumlah, b.harga,
            b.stok_minimum, b.lokasi, b.tanggal_masuk, b.status,
+           b.deskripsi, b.tanggal_update,
            k.nama_kategori, s.nama_satuan,
            (b.jumlah * b.harga) AS total_nilai
     FROM barang b
@@ -216,11 +217,20 @@ require_once '../includes/menu.php';
                             <span class="badge-pill <?= $kondisi_cls ?>"><?= $kondisi ?></span>
                         </td>
                         <td class="text-center">
+                            <!-- Tombol Detail -->
+                            <button type="button"
+                                    class="btn btn-sm btn-secondary py-0 px-2"
+                                    onclick="showDetail(<?= htmlspecialchars(json_encode($row), ENT_QUOTES) ?>)"
+                                    title="Detail">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                            <!-- Tombol Edit -->
                             <a href="edit.php?id=<?= $row['id'] ?>"
                                class="btn btn-sm btn-warning py-0 px-2"
                                title="Edit">
                                 <i class="bi bi-pencil"></i>
                             </a>
+                            <!-- Tombol Hapus -->
                             <form id="del-<?= $row['id'] ?>" action="delete.php"
                                   method="POST" class="d-inline">
                                 <input type="hidden" name="id" value="<?= $row['id'] ?>">
@@ -278,5 +288,78 @@ require_once '../includes/menu.php';
     </div>
 
 </div>
+
+<!--DETAIL BARANG -->
+<div class="modal fade" id="modalDetail" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header" style="background:var(--red-dark);color:#fff;border:none;">
+                <h6 class="modal-title fw-bold">
+                    <i class="bi bi-box-seam me-1"></i> Detail Barang
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <table class="table table-bordered table-sm mb-0" id="tabelDetail">
+                    <!-- Diisi via JavaScript -->
+                </table>
+            </div>
+            <div class="modal-footer py-2">
+                <a href="#" id="btnEditDetail" class="btn btn-warning btn-sm">
+                    <i class="bi bi-pencil me-1"></i>Edit
+                </a>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!--JAVASCRIPT -->
+<script>
+function showDetail(data) {
+    const fmt = n => 'Rp ' + parseInt(n).toLocaleString('id-ID');
+
+    const kondisi = data.jumlah == 0 || data.status === 'habis'
+        ? 'Habis'
+        : data.jumlah <= data.stok_minimum
+            ? 'Stok Rendah'
+            : 'Aman';
+
+    const rows = [
+        ['Kode Barang',    `<span style="color:var(--maroon);font-weight:600;">${data.kode_barang}</span>`],
+        ['Nama Barang',    `<strong>${data.nama_barang}</strong>`],
+        ['Kategori',       data.nama_kategori],
+        ['Satuan',         data.nama_satuan],
+        ['Lokasi',         data.lokasi || '<span class="text-muted">—</span>'],
+        ['Jumlah Stok',    `<strong>${parseInt(data.jumlah).toLocaleString('id-ID')}</strong>`],
+        ['Stok Minimum',   data.stok_minimum],
+        ['Harga Satuan',   fmt(data.harga)],
+        ['Total Nilai',    `<strong style="color:var(--red);">${fmt(data.total_nilai)}</strong>`],
+        ['Tanggal Masuk',  data.tanggal_masuk],
+        ['Terakhir Update',data.tanggal_update],
+        ['Status',         data.status],
+        ['Kondisi Stok',   kondisi],
+        ['Deskripsi',      data.deskripsi || '<span class="text-muted">—</span>'],
+    ];
+
+    let html = '';
+    rows.forEach(([label, value]) => {
+        html += `
+            <tr>
+                <td style="width:40%;background:#f9f9f9;font-weight:600;font-size:0.82rem;color:#555;">
+                    ${label}
+                </td>
+                <td style="font-size:0.85rem;">${value}</td>
+            </tr>`;
+    });
+
+    document.getElementById('tabelDetail').innerHTML = html;
+    document.getElementById('btnEditDetail').href = 'edit.php?id=' + data.id;
+
+    new bootstrap.Modal(document.getElementById('modalDetail')).show();
+}
+</script>
 
 <?php require_once '../includes/footer.php'; ?>
