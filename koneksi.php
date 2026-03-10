@@ -11,7 +11,7 @@ $dsn = "mysql:host=$host;dbname=$dbname;charset=$charset";
 $options = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,   // Lempar exception saat error
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,         // Fetch sebagai associative array
-    PDO::ATTR_EMULATE_PREPARES   => false,                    // Gunakan prepared statement asli
+    PDO::ATTR_EMULATE_PREPARES   => false,                    
 ];
 
 try {
