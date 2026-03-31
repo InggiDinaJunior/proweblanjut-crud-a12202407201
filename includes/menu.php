@@ -108,4 +108,6 @@ try {
     <div class="sidebar-footer">
         InvenRed v1.0 &mdash; Admin
     </div>
+
+    
 </div>
