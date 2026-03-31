@@ -1,5 +1,17 @@
 <?php
 session_start();
+
+// Guard: cek session atau cookie remember me
+if (!isset($_SESSION['user_id'])) {
+    if (isset($_COOKIE['remember_user_id'])) {
+        // Pulihkan session dari cookie
+        $_SESSION['user_id'] = $_COOKIE['remember_user_id'];
+    } else {
+        // Belum login, redirect ke login
+        header('Location: ../login.php');
+        exit();
+    }
+}
 require_once '../koneksi.php';
 
 $page_title = 'Dashboard';
@@ -35,9 +47,20 @@ require_once '../includes/menu.php';
 
     <!-- Page Header -->
     <div class="page-header">
-        <h5><i class="bi bi-speedometer2 me-1" style="color:var(--red);"></i> Dashboard</h5>
-        <p>Ringkasan inventaris per <?= date('d F Y') ?></p>
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h5><i class="bi bi-speedometer2 me-1" style="color:var(--red);"></i> Dashboard</h5>
+            <p>Ringkasan inventaris per <?= date('d F Y') ?> | 
+               Selamat datang, <strong><?= $_SESSION['username'] ?? 'User' ?></strong>
+            </p>
+        </div>
+        <!-- ✅ TOMOL LOGOUT -->
+       <a href="../logout.php" class="btn btn-outline-danger btn-sm" 
+   onclick="return confirm('Yakin logout dan ke register?')">
+    <i class="bi bi-box-arrow-right me-1"></i>Logout
+</a>
     </div>
+</div>
 
     <!-- STAT CARDS -->
     <div class="row g-3 mb-4">
