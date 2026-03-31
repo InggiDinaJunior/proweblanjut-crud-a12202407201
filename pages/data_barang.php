@@ -1,5 +1,17 @@
 <?php
 session_start();
+
+// Guard: cek session atau cookie remember me
+if (!isset($_SESSION['user_id'])) {
+    if (isset($_COOKIE['remember_user_id'])) {
+        // Pulihkan session dari cookie
+        $_SESSION['user_id'] = $_COOKIE['remember_user_id'];
+    } else {
+        // Belum login, redirect ke login
+        header('Location: ../login.php');
+        exit();
+    }
+}
 require_once '../koneksi.php';
 
 $page_title = 'Data Barang';
