@@ -2,7 +2,7 @@
 session_start();
 require_once 'koneksi.php';
 
-// Cek apakah sudah login atau ada cookie remember me
+// Cek sudah login atau ada cookie remember me
  if (isset($_SESSION['user_id']) || isset($_COOKIE['remember_user_id'])) {
      header("Location: pages/dashboard.php");
      exit();
@@ -25,11 +25,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($user && password_verify($password, $user["password"])) {
-            // LOGIN SUKSES! 🎉
+            // LOGIN SUKSES!
             $_SESSION["user_id"] = $user["id"];
             $_SESSION["username"] = $user["username"];
             
-            // ✅ FITUR REMEMBER ME
+            // FITUR REMEMBER ME
             if ($remember) {
                 $remember_token = $user["id"] . '|' . password_hash($user["username"], PASSWORD_DEFAULT);
                 setcookie("remember_user_id", $user["id"], time() + (7 * 24 * 60 * 60), "/");
@@ -50,7 +50,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login — InvenRed</title>
+    <title>Login — Inggi Dina</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
@@ -88,7 +88,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="logo-icon">
                 <i class="bi bi-boxes text-white" style="font-size:1.4rem;"></i>
             </div>
-            <h5>InvenRed</h5>
+            <h5>Inggi Dina</h5>
             <p>Masuk ke akun Anda</p>
         </div>
 
