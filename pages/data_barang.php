@@ -1,22 +1,24 @@
 <?php
+// pages/data_barang.php
 session_start();
 
-// Guard: cek session atau cookie remember me
+// Guard session
 if (!isset($_SESSION['user_id'])) {
-    if (isset($_COOKIE['remember_user_id'])) {
-        // Pulihkan session dari cookie
+    if (isset($_COOKIE['remember_user_id']) && isset($_COOKIE['remember_token'])) {
         $_SESSION['user_id'] = $_COOKIE['remember_user_id'];
     } else {
-        // Belum login, redirect ke login
         header('Location: ../login.php');
         exit();
     }
 }
+
 require_once '../koneksi.php';
 
 $page_title = 'Data Barang';
 
+// ============================================================
 //  PARAMETER SEARCH, FILTER & PAGINASI
+// ============================================================
 $search     = trim($_GET['search']    ?? '');
 $filter     = trim($_GET['filter']    ?? '');
 $kategori_f = (int)($_GET['kategori'] ?? 0);
@@ -24,13 +26,16 @@ $page       = max(1, (int)($_GET['page'] ?? 1));
 $per_page   = 10;
 $offset     = ($page - 1) * $per_page;
 
+// ============================================================
 //  BUILD QUERY DINAMIS
+// ============================================================
 $where  = [];
 $params = [];
 
 if ($search !== '') {
-    $where[]           = "(b.nama_barang LIKE :search OR b.kode_barang LIKE :search)";
-    $params[':search'] = "%$search%";
+    $where[]           = "(b.nama_barang LIKE ? OR b.kode_barang LIKE ?)";
+    $params[]          = "%$search%";
+    $params[]          = "%$search%";
 }
 
 if ($filter === 'rendah') {
@@ -44,8 +49,8 @@ if ($filter === 'rendah') {
 }
 
 if ($kategori_f > 0) {
-    $where[]             = "b.id_kategori = :kategori";
-    $params[':kategori'] = $kategori_f;
+    $where[]  = "b.id_kategori = ?";
+    $params[] = $kategori_f;
 }
 
 $where_sql = count($where) ? 'WHERE ' . implode(' AND ', $where) : '';
@@ -56,11 +61,12 @@ $count_stmt->execute($params);
 $total_rows  = (int)$count_stmt->fetchColumn();
 $total_pages = (int)ceil($total_rows / $per_page);
 
-// Query data
-$stmt = $pdo->prepare("
+// Query data utama
+$data_params   = array_merge($params, [$per_page, $offset]);
+$stmt          = $pdo->prepare("
     SELECT b.id, b.kode_barang, b.nama_barang, b.jumlah, b.harga,
            b.stok_minimum, b.lokasi, b.tanggal_masuk, b.status,
-           b.deskripsi, b.tanggal_update,
+           b.deskripsi, b.tanggal_update, b.gambar,
            k.nama_kategori, s.nama_satuan,
            (b.jumlah * b.harga) AS total_nilai
     FROM barang b
@@ -68,12 +74,9 @@ $stmt = $pdo->prepare("
     JOIN satuan   s ON b.id_satuan   = s.id_satuan
     $where_sql
     ORDER BY b.id DESC
-    LIMIT :limit OFFSET :offset
+    LIMIT ? OFFSET ?
 ");
-foreach ($params as $k => $v) $stmt->bindValue($k, $v);
-$stmt->bindValue(':limit',  $per_page, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset,   PDO::PARAM_INT);
-$stmt->execute();
+$stmt->execute($data_params);
 $list = $stmt->fetchAll();
 
 // Kategori untuk dropdown filter
@@ -160,6 +163,7 @@ require_once '../includes/menu.php';
                 <thead>
                     <tr>
                         <th>#</th>
+                        <th>Gambar</th>
                         <th>Kode</th>
                         <th>Nama Barang</th>
                         <th>Kategori</th>
@@ -175,7 +179,7 @@ require_once '../includes/menu.php';
                 <tbody>
                     <?php if (empty($list)): ?>
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">
+                        <td colspan="12" class="text-center text-muted py-4">
                             <i class="bi bi-inbox d-block mb-1" style="font-size:1.5rem;"></i>
                             Tidak ada data barang.
                         </td>
@@ -202,6 +206,23 @@ require_once '../includes/menu.php';
                     ?>
                     <tr>
                         <td class="text-muted"><?= $offset + $i + 1 ?></td>
+
+                        <!-- Kolom Gambar -->
+                        <td class="text-center" style="width:70px;">
+                            <?php if ($row['gambar']): ?>
+                                <img src="../uploads/<?= htmlspecialchars($row['gambar']) ?>"
+                                     alt="<?= htmlspecialchars($row['nama_barang']) ?>"
+                                     style="width:50px; height:50px; object-fit:cover; border-radius:4px; border:1px solid #ddd;"
+                                     onclick="showGambar('../uploads/<?= htmlspecialchars($row['gambar']) ?>', '<?= htmlspecialchars(addslashes($row['nama_barang'])) ?>')"
+                                     title="Klik untuk perbesar"
+                                     class="cursor-pointer">
+                            <?php else: ?>
+                                <div style="width:50px; height:50px; background:#f0f0f0; border-radius:4px; border:1px solid #ddd; display:flex; align-items:center; justify-content:center; margin:auto;">
+                                    <i class="bi bi-image text-muted" style="font-size:1.2rem;"></i>
+                                </div>
+                            <?php endif; ?>
+                        </td>
+
                         <td style="font-size:0.78rem; color:var(--maroon);">
                             <?= htmlspecialchars($row['kode_barang']) ?>
                         </td>
@@ -297,11 +318,13 @@ require_once '../includes/menu.php';
         </div>
         <?php endif; ?>
 
-    </div>
+    </div><!-- /.card -->
 
-</div>
+</div><!-- /.main-wrapper -->
 
-<!--DETAIL BARANG -->
+<!-- =============================================
+     MODAL DETAIL BARANG
+============================================= -->
 <div class="modal fade" id="modalDetail" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -311,11 +334,7 @@ require_once '../includes/menu.php';
                 </h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body p-0">
-                <table class="table table-bordered table-sm mb-0" id="tabelDetail">
-                    <!-- Diisi via JavaScript -->
-                </table>
-            </div>
+            <div class="modal-body p-0" id="detailModalBody"></div>
             <div class="modal-footer py-2">
                 <a href="#" id="btnEditDetail" class="btn btn-warning btn-sm">
                     <i class="bi bi-pencil me-1"></i>Edit
@@ -328,37 +347,58 @@ require_once '../includes/menu.php';
     </div>
 </div>
 
-<!--JAVASCRIPT -->
+<!-- MODAL GAMBAR PERBESAR -->
+<div class="modal fade" id="modalGambar" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="background:transparent; border:none;">
+            <div class="modal-body text-center p-2">
+                <img id="gambarBesar" src="" alt=""
+                     style="max-width:100%; max-height:80vh; border-radius:8px;">
+                <div id="gambarNama" class="text-white mt-2" style="font-size:0.85rem;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- =============================================
+     JAVASCRIPT
+============================================= -->
 <script>
+// Modal detail barang
 function showDetail(data) {
     const fmt = n => 'Rp ' + parseInt(n).toLocaleString('id-ID');
 
     const kondisi = data.jumlah == 0 || data.status === 'habis'
         ? 'Habis'
-        : data.jumlah <= data.stok_minimum
-            ? 'Stok Rendah'
-            : 'Aman';
+        : data.jumlah <= data.stok_minimum ? 'Stok Rendah' : 'Aman';
+
+    // Tampilkan gambar jika ada
+    const gambarHtml = data.gambar
+        ? `<div class="text-center p-3 border-bottom">
+               <img src="../uploads/${data.gambar}" alt="${data.nama_barang}"
+                    style="max-height:150px; border-radius:6px; border:1px solid #ddd;">
+           </div>`
+        : '';
 
     const rows = [
-        ['Kode Barang',    `<span style="color:var(--maroon);font-weight:600;">${data.kode_barang}</span>`],
-        ['Nama Barang',    `<strong>${data.nama_barang}</strong>`],
-        ['Kategori',       data.nama_kategori],
-        ['Satuan',         data.nama_satuan],
-        ['Lokasi',         data.lokasi || '<span class="text-muted">—</span>'],
-        ['Jumlah Stok',    `<strong>${parseInt(data.jumlah).toLocaleString('id-ID')}</strong>`],
-        ['Stok Minimum',   data.stok_minimum],
-        ['Harga Satuan',   fmt(data.harga)],
-        ['Total Nilai',    `<strong style="color:var(--red);">${fmt(data.total_nilai)}</strong>`],
-        ['Tanggal Masuk',  data.tanggal_masuk],
-        ['Terakhir Update',data.tanggal_update],
-        ['Status',         data.status],
-        ['Kondisi Stok',   kondisi],
-        ['Deskripsi',      data.deskripsi || '<span class="text-muted">—</span>'],
+        ['Kode Barang',     `<span style="color:var(--maroon);font-weight:600;">${data.kode_barang}</span>`],
+        ['Nama Barang',     `<strong>${data.nama_barang}</strong>`],
+        ['Kategori',        data.nama_kategori],
+        ['Satuan',          data.nama_satuan],
+        ['Lokasi',          data.lokasi || '<span class="text-muted">—</span>'],
+        ['Jumlah Stok',     `<strong>${parseInt(data.jumlah).toLocaleString('id-ID')}</strong>`],
+        ['Stok Minimum',    data.stok_minimum],
+        ['Harga Satuan',    fmt(data.harga)],
+        ['Total Nilai',     `<strong style="color:var(--red);">${fmt(data.total_nilai)}</strong>`],
+        ['Tanggal Masuk',   data.tanggal_masuk],
+        ['Status',          data.status],
+        ['Kondisi Stok',    kondisi],
+        ['Deskripsi',       data.deskripsi || '<span class="text-muted">—</span>'],
     ];
 
-    let html = '';
+    let tableHtml = '';
     rows.forEach(([label, value]) => {
-        html += `
+        tableHtml += `
             <tr>
                 <td style="width:40%;background:#f9f9f9;font-weight:600;font-size:0.82rem;color:#555;">
                     ${label}
@@ -367,11 +407,24 @@ function showDetail(data) {
             </tr>`;
     });
 
-    document.getElementById('tabelDetail').innerHTML = html;
-    document.getElementById('btnEditDetail').href = 'edit.php?id=' + data.id;
+    document.getElementById('detailModalBody').innerHTML =
+        gambarHtml +
+        `<table class="table table-bordered table-sm mb-0">${tableHtml}</table>`;
 
+    document.getElementById('btnEditDetail').href = 'edit.php?id=' + data.id;
     new bootstrap.Modal(document.getElementById('modalDetail')).show();
 }
+
+// Modal gambar perbesar
+function showGambar(src, nama) {
+    document.getElementById('gambarBesar').src  = src;
+    document.getElementById('gambarNama').textContent = nama;
+    new bootstrap.Modal(document.getElementById('modalGambar')).show();
+}
 </script>
+
+<style>
+    .cursor-pointer { cursor: pointer; }
+</style>
 
 <?php require_once '../includes/footer.php'; ?>

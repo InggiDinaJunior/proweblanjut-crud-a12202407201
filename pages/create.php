@@ -1,21 +1,22 @@
 <?php
+// pages/create.php
 session_start();
 
-// Guard: cek session atau cookie remember me
+// Guard session
 if (!isset($_SESSION['user_id'])) {
-    if (isset($_COOKIE['remember_user_id'])) {
-        // Pulihkan session dari cookie
+    if (isset($_COOKIE['remember_user_id']) && isset($_COOKIE['remember_token'])) {
         $_SESSION['user_id'] = $_COOKIE['remember_user_id'];
     } else {
-        // Belum login, redirect ke login
         header('Location: ../login.php');
         exit();
     }
 }
+
 require_once '../koneksi.php';
 
 $page_title = 'Tambah Barang';
 
+// Generate kode barang otomatis
 function generateKode(PDO $pdo): string {
     $last = $pdo->query("SELECT kode_barang FROM barang ORDER BY id DESC LIMIT 1")->fetchColumn();
     $next = 1;
@@ -28,6 +29,7 @@ function generateKode(PDO $pdo): string {
 $kategori_list = $pdo->query("SELECT * FROM kategori ORDER BY nama_kategori")->fetchAll();
 $satuan_list   = $pdo->query("SELECT * FROM satuan ORDER BY nama_satuan")->fetchAll();
 
+// Default nilai form
 $errors = [];
 $old    = [
     'kode_barang'   => generateKode($pdo),
@@ -43,7 +45,9 @@ $old    = [
     'status'        => 'aktif',
 ];
 
-// SUBMIT
+// ============================================================
+//  PROSES SUBMIT
+// ============================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $old = [
         'kode_barang'   => trim($_POST['kode_barang']   ?? ''),
@@ -59,50 +63,104 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'status'        => trim($_POST['status']        ?? 'aktif'),
     ];
 
-    // Validasi
-    if ($old['kode_barang'] === '')   $errors['kode_barang']   = 'Wajib diisi.';
-    if ($old['nama_barang'] === '')   $errors['nama_barang']   = 'Wajib diisi.';
-    if ($old['id_kategori'] === 0)    $errors['id_kategori']   = 'Pilih kategori.';
-    if ($old['id_satuan']   === 0)    $errors['id_satuan']     = 'Pilih satuan.';
-    if (!is_numeric($old['jumlah']) || (int)$old['jumlah'] < 0)
-                                      $errors['jumlah']        = 'Harus angka positif.';
-    if (!is_numeric($old['harga'])  || (float)$old['harga'] < 0)
-                                      $errors['harga']         = 'Harus angka positif.';
-    if (!is_numeric($old['stok_minimum']) || (int)$old['stok_minimum'] < 0)
-                                      $errors['stok_minimum']  = 'Harus angka positif.';
-    if ($old['tanggal_masuk'] === '') $errors['tanggal_masuk'] = 'Wajib diisi.';
+    // --------------------------------------------------------
+    //  VALIDASI INPUT
+    // --------------------------------------------------------
+    if ($old['kode_barang'] === '')
+        $errors['kode_barang'] = 'Kode barang wajib diisi.';
 
-    // Cek duplikat kode
+    if ($old['nama_barang'] === '')
+        $errors['nama_barang'] = 'Nama barang wajib diisi.';
+
+    if ($old['id_kategori'] === 0)
+        $errors['id_kategori'] = 'Pilih kategori.';
+
+    if ($old['id_satuan'] === 0)
+        $errors['id_satuan'] = 'Pilih satuan.';
+
+    if (!is_numeric($old['jumlah']) || (int)$old['jumlah'] < 0)
+        $errors['jumlah'] = 'Jumlah harus berupa angka positif.';
+
+    if (!is_numeric($old['harga']) || (float)$old['harga'] < 0)
+        $errors['harga'] = 'Harga harus berupa angka positif.';
+
+    if (!is_numeric($old['stok_minimum']) || (int)$old['stok_minimum'] < 0)
+        $errors['stok_minimum'] = 'Stok minimum harus berupa angka positif.';
+
+    if ($old['tanggal_masuk'] === '')
+        $errors['tanggal_masuk'] = 'Tanggal masuk wajib diisi.';
+
+    // Cek duplikat kode barang
     if (empty($errors['kode_barang'])) {
-        $chk = $pdo->prepare("SELECT COUNT(*) FROM barang WHERE kode_barang = :kode");
-        $chk->execute([':kode' => $old['kode_barang']]);
+        $chk = $pdo->prepare("SELECT COUNT(*) FROM barang WHERE kode_barang = ?");
+        $chk->execute([$old['kode_barang']]);
         if ((int)$chk->fetchColumn() > 0)
-            $errors['kode_barang'] = 'Kode sudah digunakan.';
+            $errors['kode_barang'] = 'Kode barang sudah digunakan.';
     }
 
+    // --------------------------------------------------------
+    //  VALIDASI & PROSES UPLOAD GAMBAR
+    // --------------------------------------------------------
+    $nama_file_gambar = null;
+
+    if (isset($_FILES['gambar']) && $_FILES['gambar']['error'] !== UPLOAD_ERR_NO_FILE) {
+
+        $file       = $_FILES['gambar'];
+        $allowed    = ['jpg', 'jpeg', 'png'];
+        $max_size   = 2 * 1024 * 1024; // 2 MB
+        $ext        = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            $errors['gambar'] = 'Terjadi kesalahan saat upload file.';
+        } elseif (!in_array($ext, $allowed)) {
+            $errors['gambar'] = 'Format file tidak diizinkan. Gunakan JPG atau PNG.';
+        } elseif ($file['size'] > $max_size) {
+            $errors['gambar'] = 'Ukuran file maksimal 2 MB.';
+        } else {
+            // Buat nama file unik: uniqid + nama asli
+            $nama_file_gambar = uniqid() . '_' . basename($file['name']);
+            $upload_dir       = '../uploads/';
+
+            // Buat folder uploads jika belum ada
+            if (!is_dir($upload_dir)) {
+                mkdir($upload_dir, 0755, true);
+            }
+
+            // Pindahkan file dari direktori temporer ke folder uploads
+            if (!move_uploaded_file($file['tmp_name'], $upload_dir . $nama_file_gambar)) {
+                $errors['gambar']  = 'Gagal menyimpan file. Coba lagi.';
+                $nama_file_gambar  = null;
+            }
+        }
+    }
+
+    // --------------------------------------------------------
+    //  SIMPAN KE DATABASE (jika tidak ada error)
+    // --------------------------------------------------------
     if (empty($errors)) {
         try {
-            $pdo->prepare("
+            // Prepared statement INSERT
+            $stmt = $pdo->prepare("
                 INSERT INTO barang
                     (kode_barang, nama_barang, id_kategori, id_satuan,
                      jumlah, harga, stok_minimum, lokasi, deskripsi,
-                     tanggal_masuk, status)
-                VALUES
-                    (:kode, :nama, :id_kategori, :id_satuan,
-                     :jumlah, :harga, :stok_min, :lokasi, :deskripsi,
-                     :tgl, :status)
-            ")->execute([
-                ':kode'        => $old['kode_barang'],
-                ':nama'        => $old['nama_barang'],
-                ':id_kategori' => $old['id_kategori'],
-                ':id_satuan'   => $old['id_satuan'],
-                ':jumlah'      => (int)$old['jumlah'],
-                ':harga'       => (float)$old['harga'],
-                ':stok_min'    => (int)$old['stok_minimum'],
-                ':lokasi'      => $old['lokasi']    ?: null,
-                ':deskripsi'   => $old['deskripsi'] ?: null,
-                ':tgl'         => $old['tanggal_masuk'],
-                ':status'      => $old['status'],
+                     gambar, tanggal_masuk, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+
+            $stmt->execute([
+                $old['kode_barang'],
+                $old['nama_barang'],
+                $old['id_kategori'],
+                $old['id_satuan'],
+                (int)$old['jumlah'],
+                (float)$old['harga'],
+                (int)$old['stok_minimum'],
+                $old['lokasi']    ?: null,
+                $old['deskripsi'] ?: null,
+                $nama_file_gambar,
+                $old['tanggal_masuk'],
+                $old['status'],
             ]);
 
             $_SESSION['flash'] = [
@@ -142,12 +200,13 @@ require_once '../includes/menu.php';
     <?php endif; ?>
 
     <!-- FORM -->
+    <!-- enctype="multipart/form-data" wajib ada untuk upload file -->
     <div class="card border-0 shadow-sm">
         <div class="card-header-red">
             <i class="bi bi-pencil-square"></i> Form Tambah Barang
         </div>
         <div class="card-body">
-            <form method="POST" action="create.php">
+            <form method="POST" action="create.php" enctype="multipart/form-data">
                 <div class="row g-3">
 
                     <!-- Kode Barang -->
@@ -301,6 +360,21 @@ require_once '../includes/menu.php';
                                   placeholder="Keterangan tambahan (opsional)..."><?= htmlspecialchars($old['deskripsi']) ?></textarea>
                     </div>
 
+                    <!-- Upload Gambar -->
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">
+                            Gambar Barang
+                        </label>
+                        <input type="file" name="gambar" accept=".jpg,.jpeg,.png"
+                               class="form-control form-control-sm <?= isset($errors['gambar']) ? 'is-invalid' : '' ?>">
+                        <?php if (isset($errors['gambar'])): ?>
+                            <div class="invalid-feedback"><?= $errors['gambar'] ?></div>
+                        <?php endif; ?>
+                        <small class="text-muted" style="font-size:0.75rem;">
+                            Format: JPG, JPEG, PNG. Maksimal 2 MB. (Opsional)
+                        </small>
+                    </div>
+
                     <!-- Tombol -->
                     <div class="col-12 d-flex gap-2 pt-1">
                         <button type="submit" class="btn btn-red btn-sm">
@@ -316,6 +390,6 @@ require_once '../includes/menu.php';
         </div>
     </div>
 
-</div>
+</div><!-- /.main-wrapper -->
 
 <?php require_once '../includes/footer.php'; ?>
