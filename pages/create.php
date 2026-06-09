@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nama_file_gambar = uniqid() . '_' . basename($file['name']);
             $upload_dir       = '../uploads/';
 
-            // Buat folder uploads jika belum ada
+            // Folder uploads jika belum ada
             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0755, true);
             }
